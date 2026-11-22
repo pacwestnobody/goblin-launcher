@@ -1,0 +1,29 @@
+[project]
+name = "goblin-launcher"
+license = {text = "MIT"}
+version = "2.0.0.dev0"
+description = "Local + cloud AI agents, a shared room with cross-talk, and a lab vault, in one program"
+requires-python = ">=3.11"
+dependencies = ["PyYAML>=6.0", "cryptography>=41"]
+
+[project.optional-dependencies]
+knowledge = ["sqlite-vec>=0.1.6"]
+dev = ["pytest>=8", "pyflakes"]
+
+[project.scripts]
+goblin = "goblin.cli:main"
+goblin-bridge = "goblin.bridge:cli_main"
+goblin-vault = "goblin.vault.__main__:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["goblin*"]
+
+[tool.setuptools.package-data]
+goblin = ["ui/static/**/*", "android/*.apk"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

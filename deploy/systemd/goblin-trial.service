@@ -1,0 +1,9 @@
+[Unit]
+Description=Goblin Launcher TRIAL beside the old launcher (ports 8780/8775/8781, own state, no bridge wake)
+
+[Service]
+ExecStart=@SRC@/.venv/bin/goblin serve
+Environment=GOBLIN_CONFIG=%h/.config/goblin/trial.yaml
+Environment=PYTHONUNBUFFERED=1
+Restart=on-failure
+RestartSec=3

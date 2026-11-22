@@ -1,0 +1,6 @@
+[Unit]
+Description=Goblin Launcher: USB disk inventory for goblin-vault
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /usr/local/sbin/goblin-usb-scan

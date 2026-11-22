@@ -1,0 +1,12 @@
+{
+  "name": "openclaw-goblin",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Goblin Launcher for OpenClaw: per-turn verified context, tool traces, lab_run",
+  "peerDependencies": { "openclaw": ">=2026.3.24-beta.2" },
+  "openclaw": {
+    "extensions": ["./index.js"],
+    "compat": { "pluginApi": ">=2026.3.24-beta.2", "minGatewayVersion": "2026.3.24-beta.2" }
+  }
+}

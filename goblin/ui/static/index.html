@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Goblin Launcher</title>
+<link rel="icon" href="/static/img/goblin.webp">
+<link rel="stylesheet" href="/static/fonts/fonts.css">
+<link rel="stylesheet" href="/static/goblin.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="plate top">
+    <div class="brand">
+      <div class="goblin grump" id="goblin"><img src="/static/img/goblin.webp" alt="The goblin tinkerer"></div>
+      <div>
+        <div class="nameplate">Goblin Launcher</div>
+        <div class="tagline" id="tagline">built it, broke it, built it better</div>
+      </div>
+    </div>
+    <div class="gears" aria-hidden="true"><svg id="gearsvg" viewBox="0 0 520 110" preserveAspectRatio="xMidYMid meet"></svg></div>
+    <div class="gauge-box" title="GPU memory in use">
+      <svg viewBox="0 0 150 92" aria-label="GPU memory gauge">
+        <path d="M14 78 A61 61 0 0 1 136 78" fill="none" stroke="#262c2d" stroke-width="12"/>
+        <path d="M128.7 47.5 A61 61 0 0 1 136 78" fill="none" stroke="#e0341c" stroke-width="12"/>
+        <g id="ticks"></g>
+        <g id="needle"><path d="M75 78 L73 30 L75 22 L77 30 Z" fill="#e3c48e"/></g>
+        <circle cx="75" cy="78" r="7" fill="#6e5434" stroke="#e3c48e" stroke-width="2"/>
+        <text x="75" y="90" text-anchor="middle" font-family="Special Elite, monospace" font-size="11" fill="#d9ccb0" id="vramtxt">– / 16 GB</text>
+      </svg>
+      GPU pressure
+    </div>
+    <div class="vault" id="vault">
+      <button class="doorbtn" id="doorbtn" aria-label="Vault door" aria-expanded="false" aria-controls="keypad">
+        <span class="door"><img id="wheel" src="/static/img/door.webp" alt=""></span>
+      </button>
+      <div class="vault-txt"><span class="vault-state" id="vstate">…</span><br><span class="vault-sub" id="vsub">checking the vault</span>
+        <button class="brass wind" id="extend" hidden title="Add time before the vault locks itself">⟳ Wind +15 min</button></div>
+      <div class="keypad" id="keypad" hidden role="dialog" aria-label="Vault PIN">
+        <div class="kp-title">Vault PIN</div>
+        <div class="lamps" id="lamps" aria-live="polite"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <form class="pinrow" id="pinform">
+          <input id="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="6" pattern="[0-9]*" aria-label="6-digit vault PIN" placeholder="······">
+          <button class="brass" type="submit" aria-label="Turn the wheel">⟳</button>
+        </form>
+        <div class="kp-hint" id="kphint">6 digits · Enter to turn</div>
+      </div>
+    </div>
+  </header>
+
+  <section class="main">
+    <div class="plate">
+      <h2>The Boilerworks <small>pick a model · it turns to the top</small></h2>
+      <div class="dials">
+        <div class="dialcell furnace">
+          <div class="dialtitle">Furnace<span>local · one burns at a time</span></div>
+          <svg class="dial" id="dialF" viewBox="0 0 400 400" role="group" aria-label="Local models: turning the dial loads that model on the GPU"></svg>
+          <div class="steam l" id="steamL"><i></i><i></i><i></i><i></i></div>
+          <div class="steam r" id="steamR"><i></i><i></i><i></i><i></i></div>
+          <label class="modebox" id="modebox" hidden><input type="checkbox" id="modechk"> <span id="modelbl">Pentest tutor</span></label>
+          <div class="dialbtns"><button class="brass" data-act="term" data-dial="F">Open terminal</button><button class="iron" data-act="seat" data-dial="F">Seat in room</button></div>
+        </div>
+        <div class="dialcell aether">
+          <div class="dialtitle">Aether<span>cloud · no fire needed</span></div>
+          <svg class="dial" id="dialA" viewBox="0 0 400 400" role="group" aria-label="Cloud models"></svg>
+          <div class="dialbtns"><button class="brass" data-act="term" data-dial="A">Open terminal</button><button class="iron" data-act="seat" data-dial="A">Seat in room</button></div>
+        </div>
+      </div>
+      <div class="cwdrow"><label for="cwd">Terminals start in</label><input id="cwd" placeholder="~ (home)" autocomplete="off"></div>
+    </div>
+
+    <div class="plate room">
+      <h2>The Counting Room <small id="roommode">sequential</small></h2>
+      <div class="roombar">
+        <select id="roomsel" aria-label="Room"></select>
+        <button class="iron" id="roomnew" title="Open a new room with the seats below">New room</button>
+      </div>
+      <div class="seats" id="seats"></div>
+      <div class="screen" id="screen" aria-live="polite"></div>
+      <form class="composer" id="composer"><input id="say" autocomplete="off" placeholder="Speak to the room… (name a seat to ask just that one)"><button class="brass" type="submit">Send</button></form>
+    </div>
+  </section>
+
+  <section class="plate workshop" id="workshop" hidden aria-label="The Workshop: keys, phones and upkeep">
+    <h2>The Workshop <small>behind the vault door · locks with it</small></h2>
+    <div class="ws-tabs" role="tablist">
+      <button role="tab" class="on" data-ws="keys" aria-selected="true">USB keys</button>
+      <button role="tab" data-ws="phones" aria-selected="false">Phones</button>
+      <button role="tab" data-ws="rules" aria-selected="false">Who may knock</button>
+      <button role="tab" data-ws="upkeep" aria-selected="false">Upkeep</button>
+      <button role="tab" data-ws="log" aria-selected="false">Logbook</button>
+    </div>
+
+    <div class="ws-pane" data-pane="keys">
+      <div class="rows" id="keyrows"></div>
+      <div class="howto">
+        <b>Enroll a new key</b>
+        <ol><li>Plug the stick into this machine. It must not be mounted.</li><li>Pick it below and type the confirm phrase shown.</li><li>The stick is wiped and gets its own key. Your never-wipe list is always skipped.</li></ol>
+        <div class="inline"><select id="keydisk"></select><input id="keylabel" placeholder="Name for it (optional)" autocomplete="off"></div>
+        <div class="inline"><input id="keyconfirm" placeholder="Type: WIPE /dev/…" autocomplete="off"><button class="brass" id="keyenroll">Enroll</button></div>
+      </div>
+    </div>
+
+    <div class="ws-pane" data-pane="phones" hidden>
+      <div class="rows" id="phonerows"></div>
+      <div class="howto phonesetup">
+        <b>Add a phone</b>
+        <ol class="steps">
+          <li><b>Turn on USB debugging</b> (once per phone). Settings → About phone → tap <i>Build number</i> seven times
+            until it says you're a developer. Then Settings → System → Developer options → turn on <i>USB debugging</i>.</li>
+          <li><b>Plug it in and allow this computer.</b> Use a data cable. The phone asks <i>Allow USB debugging?</i>:
+            tick <i>Always allow from this computer</i> and tap Allow.
+            <div class="phonelamp"><i id="plamp"></i><span id="phoneconn">Looking for a phone…</span></div></li>
+          <li><b>Pair and install.</b> Pick the USB key this phone belongs to, give it a name, and choose the phone's own PIN
+            (4 to 12 digits, not your vault PIN). One button pairs it in the vault and installs the app with the pairing inside.
+            <div class="inline"><select id="pairkey"></select><input id="pairlabel" placeholder="Phone name" autocomplete="off"></div>
+            <div class="inline"><input id="pairmpin" type="password" inputmode="numeric" maxlength="12" placeholder="Phone PIN" autocomplete="off">
+              <input id="pairmpin2" type="password" inputmode="numeric" maxlength="12" placeholder="Phone PIN again" autocomplete="off">
+              <button class="brass" id="pairgo" disabled>Pair and install</button></div></li>
+          <li><b>On the phone:</b> the app opens by itself. Type the same phone PIN once, then <i>Turn the wheel</i> to test it.
+            For the lab menu and room, install Termux from F-Droid, then in Termux's app settings allow <i>Display over other apps</i>.
+            You can turn USB debugging off again afterwards.</li>
+        </ol>
+        <div class="note">One phone per USB key: unpair the old one first to replace it. Revoking the key unpairs its phone too.</div>
+      </div>
+    </div>
+
+    <div class="ws-pane" data-pane="rules" hidden>
+      <table class="rules"><thead><tr><th>Lab host</th><th>When an agent asks</th></tr></thead><tbody id="rulerows"></tbody></table>
+      <div class="inline"><span class="note" id="rulenote">Commands stay read-only unless a host is on the write list.</span><button class="brass" id="rulesave">Save rules</button></div>
+    </div>
+
+    <div class="ws-pane" data-pane="upkeep" hidden>
+      <div class="tiles">
+        <div class="tile"><b>Back up the vault</b><span>Snapshot the encrypted vault before changing anything.</span><button class="brass" id="backup">Snapshot</button></div>
+        <div class="tile"><b>Change vault PIN</b><span>Six digits. Your USB keys and phone keep working.</span>
+          <input id="newpin1" type="password" inputmode="numeric" maxlength="12" placeholder="New PIN" autocomplete="new-password">
+          <input id="newpin2" type="password" inputmode="numeric" maxlength="12" placeholder="New PIN again" autocomplete="new-password">
+          <button class="brass" id="pinchange">Change</button></div>
+        <div class="tile"><b>Forgot the PIN?</b><span>Kept off this page on purpose: anything on this machine can reach the launcher, so resetting with a USB key alone needs root. Run <code>sudo goblin-vault-admin recover-pin</code></span></div>
+        <div class="tile"><b>Add a credential</b><span>Secrets are typed at a root prompt, never on this page. Run <code>sudo goblin-vault-admin add-credential ID ssh_private_key --key-file FILE</code></span></div>
+        <div class="tile"><b>New phone certificate</b><span>Makes a new TLS certificate for the phone link. Re-pair and push the phone after.</span><button class="iron" id="rotate">Rotate</button></div>
+      </div>
+    </div>
+
+    <div class="ws-pane" data-pane="log" hidden>
+      <ul class="logbook" id="logbook"></ul>
+    </div>
+
+    <div class="confirm" id="confirm" hidden>
+      <span id="confirmWhat"></span>
+      <input id="confirmPin" type="password" inputmode="numeric" maxlength="6" placeholder="PIN again" aria-label="Vault PIN to confirm" autocomplete="off">
+      <button class="brass" id="confirmGo">Do it</button><button class="iron" id="confirmNo">Cancel</button>
+    </div>
+  </section>
+
+  <section class="deck">
+    <div class="plate">
+      <h2>Pneumatic Tube <small>things wanting a yes</small></h2>
+      <div class="tube" id="tube"></div>
+      <div class="bot" id="bot" title="The tube-minder"><img src="/static/img/bot.webp" alt=""><i class="eye l"></i><i class="eye r"></i></div>
+    </div>
+    <div class="plate">
+      <h2>Levers <small>the stack</small></h2>
+      <div class="levers">
+        <button class="lever" id="lvOllama"><svg viewBox="0 0 64 96" aria-hidden="true"><rect x="10" y="66" width="44" height="18" rx="4" fill="#2b3132" stroke="#6e5434" stroke-width="2"/><g class="arm"><rect x="29" y="18" width="6" height="58" rx="3" fill="#7d6040"/><circle cx="32" cy="16" r="9" fill="#2f6b45" stroke="#222d1c" stroke-width="2"/></g></svg><span class="lever-lbl">GPU Ollama</span><span class="lever-state" id="ollamaState">…</span></button>
+        <button class="lever" id="lvUnload"><svg viewBox="0 0 64 96" aria-hidden="true"><rect x="10" y="66" width="44" height="18" rx="4" fill="#2b3132" stroke="#6e5434" stroke-width="2"/><g class="arm"><rect x="29" y="18" width="6" height="58" rx="3" fill="#7d6040"/><circle cx="32" cy="16" r="9" fill="#b08a52" stroke="#3a2c1c" stroke-width="2"/></g></svg><span class="lever-lbl">Bank the fire</span><span class="lever-state">Unload all</span></button>
+        <button class="lever danger" id="lvStack"><svg viewBox="0 0 64 96" aria-hidden="true"><rect x="10" y="66" width="44" height="18" rx="4" fill="#2b3132" stroke="#6e5434" stroke-width="2"/><g class="arm"><rect x="29" y="18" width="6" height="58" rx="3" fill="#7d6040"/><circle cx="32" cy="16" r="9" fill="#e0341c" stroke="#5c1a10" stroke-width="2"/></g><g class="guard"><path d="M8 30 H58 V44 H8 Z" fill="#e0341c66" stroke="#e0341c" stroke-width="2"/><path d="M14 37 H52" stroke="#f3c9b9" stroke-width="1.5" stroke-dasharray="4 3"/></g></svg><span class="lever-lbl">Whole stack</span><span class="lever-state" id="stackState">…</span></button>
+      </div>
+      <div class="stacklights" id="stacklights"></div>
+    </div>
+    <div class="plate ledgerbox">
+      <h2>The Goblin’s Notes</h2>
+      <div class="ledger">
+        <h3>Things I poked &amp; they held</h3>
+        <ul id="notes"><li><span>…</span>Checking the shelf</li></ul>
+        <div class="tally"><span id="tally"></span> <button class="linkbtn" id="recheck">Poke them again</button></div>
+      </div>
+    </div>
+  </section>
+  <section class="plate ledgerplate" id="ledgerplate" aria-label="The Ledger: librarian jobs, route cards and the shadow report">
+    <h2>The Ledger <small>the librarian's jobs, cards &amp; report · <span id="lmode">…</span></small></h2>
+    <div class="ws-tabs ledger-tabs" role="tablist">
+      <button role="tab" class="on" data-lt="jobs" aria-selected="true">Jobs</button>
+      <button role="tab" data-lt="cards" aria-selected="false">Route cards <span id="lcards"></span></button>
+      <button role="tab" data-lt="report" aria-selected="false">Report</button>
+      <button role="tab" data-lt="sandbox" aria-selected="false">Sandbox</button>
+    </div>
+    <div class="lt-pane" data-lpane="jobs">
+      <div class="ledgergrid">
+        <form id="jobform" class="jobform" autocomplete="off">
+          <textarea id="jtask" placeholder="What should be fixed or checked? Paste the error if there is one."></textarea>
+          <div class="inline">
+            <label>Runs on <select id="jtarget"></select></label>
+            <label>Ask <select id="japprove"><option value="readonly">only for changes</option><option value="ask">every shell/write</option><option value="auto">never</option></select></label>
+          </div>
+          <div class="inline">
+            <label>Model <select id="jtalker"></select></label>
+            <label>Kind <select id="jkind"><option value="">(none: trace only)</option></select></label>
+          </div>
+          <details><summary class="note">Error, artifact, verify</summary>
+            <input id="jartifact" placeholder="Artifact, e.g. ~/app or nginx.service">
+            <textarea id="jerror" placeholder="The failure message. Cards are keyed by its fingerprint."></textarea>
+            <input id="jverify" placeholder="Verify command, e.g. systemctl is-active myapp">
+          </details>
+          <div class="inline"><button class="brass" id="jrun" type="submit">Run job</button><span class="note" id="jhint"></span></div>
+          <ul class="joblist" id="joblist"></ul>
+        </form>
+        <div class="jobview">
+          <div class="inline"><b id="jtitle">No job selected</b><button class="iron danger" id="jstop" hidden>Stop</button></div>
+          <div class="stream" id="jstream"><div class="note">Run a job, or pick one from the list.</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="lt-pane" data-lpane="cards" hidden><div id="cardlist"></div></div>
+    <div class="lt-pane" data-lpane="report" hidden><pre class="report" id="reporttxt">…</pre></div>
+    <div class="lt-pane" data-lpane="sandbox" hidden>
+      <div class="inline"><span class="note" id="sbstate">…</span><button class="iron" id="sbcheck">Check</button><button class="iron danger" id="sbreset">Reset to clean</button></div>
+    </div>
+  </section>
+  <div class="underworks" aria-hidden="true"><svg id="under" viewBox="0 0 1320 150" preserveAspectRatio="xMidYMin slice"></svg><div class="steam vent" id="vent"><i></i><i></i><i></i><i></i></div></div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="/static/goblin.js"></script>
+<script src="/static/ledger.js"></script>
+</body>
+</html>

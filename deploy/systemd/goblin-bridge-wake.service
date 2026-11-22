@@ -1,0 +1,14 @@
+[Unit]
+Description=Goblin Launcher bridge wake: Grok Build and Claude Code answer phone-bridge posts
+After=goblin.service
+Wants=goblin.service
+
+[Service]
+ExecStart=@SRC@/.venv/bin/goblin bridge-wake
+Restart=on-failure
+RestartSec=5
+Nice=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

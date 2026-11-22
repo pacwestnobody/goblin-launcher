@@ -1,0 +1,88 @@
+# Goblin Launcher configuration: copy to ~/.config/goblin/config.yaml and fit it to your machine.
+# No secrets in this file. Keys come from an environment variable (key_env) or a mode-600 file (key_file).
+
+owner: Alex                      # how agents refer to you
+machine: Workbench               # how agents refer to this computer
+tagline: built it, broke it, built it better
+
+paths:
+  state: ~/.local/share/goblin   # rooms, traces, route cards, logs
+  knowledge: ~/knowledge         # optional notes library (the librarian reads it)
+
+ui:   {host: 127.0.0.1, port: 8770}
+room:
+  host: 127.0.0.1
+  port: 8765
+  max_rounds: 20                 # tool calls per seat turn
+  tool_result_cap: 4000          # characters of each tool result kept in the conversation
+  lab_summary: ""                # one line every seat sees, e.g. "LAN 192.168.1.0/24, router .1"
+
+# ---- models ---------------------------------------------------------------------------
+providers:
+  local:      {type: ollama, base_url: "http://127.0.0.1:11434"}     # start_command: ~/start-ollama.sh
+  openai:     {type: openai, base_url: "https://api.openai.com/v1", key_env: OPENAI_API_KEY}
+  anthropic:  {type: anthropic, key_env: ANTHROPIC_API_KEY}
+  openrouter: {type: openai, base_url: "https://openrouter.ai/api/v1", key_env: OPENROUTER_API_KEY}
+  groq:       {type: openai, base_url: "https://api.groq.com/openai/v1", key_env: GROQ_API_KEY}
+  lmstudio:   {type: openai, base_url: "http://127.0.0.1:1234/v1"}
+  grok-proxy: {type: grok_proxy}                                    # signed in with `grok login`
+
+gpu: {provider: local, exclusive: true}   # local models on this Ollama load one at a time
+
+cli_agents:                      # real agent CLIs: launched in a terminal, or sitting in the room
+  grok:   {bin: ~/.grok/bin/grok, default_model: grok-4.7}
+  claude: {bin: ~/.local/bin/claude}
+
+# ---- the room ---------------------------------------------------------------------------
+seats:                           # provider: a name from `providers`, or grok-cli / claude-code
+  qwen:   {label: Qwen, provider: local, model: "qwen3:8b", color: "#3ddc97"}
+  claude: {label: Claude Code, provider: claude-code, color: "#d97757", aliases: [claude]}
+  grok:   {label: Grok Build, provider: grok-cli, model: grok-4.7, color: "#f0c14a", aliases: [grok]}
+  gpt:    {label: GPT, provider: openai, model: gpt-4o-mini, color: "#10a37f"}
+
+guard:                           # limits for seats marked `guard: true`
+  knowledge_via_lookup: true     # lab facts through librarian_lookup, not grepping the notes
+  read_only: []                  # paths a guarded seat may read but never write
+  no_access: []                  # paths it may not touch at all
+
+# ---- the launcher page --------------------------------------------------------------------
+dials:
+  furnace:                       # local models (turning the dial loads one; the rest unload)
+    - {slot: qwen, name: Qwen, use: everyday, model: "qwen3:8b", agent: "grok:local-qwen", seat: qwen}
+  aether:                        # cloud agents
+    - {slot: claude, name: Claude, use: builder, agent: claude-code, seat: claude}
+    - {slot: grok, name: Grok, use: builder, agent: "grok:grok-4.7", seat: grok}
+
+stack:                           # the levers
+  units: []                      # user units switched off/on with the whole stack
+  webui: {url: "http://127.0.0.1:3000/", container: open-webui}
+  watch: {}                      # {Label: port} shown as lights
+
+# ---- phone bridge: bots post here over HTTP; CLI agents are woken for it ------------------------
+bridge:
+  room_id: phone-bridge
+  terminal_author: my-bot        # who `goblin room post` posts as
+  authors:
+    my-bot:      {label: My bot, color: "#e85d4c"}
+    grok-build:  {label: Grok Build, color: "#f0c14a"}
+    claude-code: {label: Claude Code, color: "#d97757"}
+  wake:
+    enabled: false
+    authors: [my-bot]            # posts by these wake an agent
+    default: grok                # when the post names neither
+    agents:
+      grok:   {author: grok-build}
+      claude: {author: claude-code}
+    max_hops: 4                  # agent-to-agent hand-offs per human post
+    notes: ""                    # extra instructions for woken agents
+
+# ---- lab and vault ---------------------------------------------------------------------------
+lab_hosts: {}                    # {vault target id: "what it is"} for the lab_run tool description
+vault: {socket: /run/goblin-vault/vault.sock, token_file: ~/.config/goblin/vault-token}
+
+phone:
+  enabled: false
+  bind: 192.168.1.10             # this computer's LAN address
+  port: 8771
+  allow: [192.168.1.0/24]        # LAN / WireGuard only
+  ssh_user: alex                 # for the app's Termux lab menu (optional)

@@ -1,0 +1,11 @@
+[Unit]
+Description=Goblin Launcher: refresh the USB disk inventory
+
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=10s
+AccuracySec=2s
+Unit=goblin-usb-scan.service
+
+[Install]
+WantedBy=timers.target

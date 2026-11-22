@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Forced command for the phone's Termux SSH key (authorized_keys: command="…/phone-gate",restrict).
+# The key reaches only the lab menu, the shared room and vault status. A full shell needs a password login.
+export PATH="$HOME/.local/bin:$HOME/bin:/usr/local/bin:/usr/bin:/bin"
+set -f
+read -r -a a <<< "${SSH_ORIGINAL_COMMAND:-}"
+case "${a[0]:-}" in
+  ""|menu|lab-menu)
+    if [ -x "$HOME/bin/lab-menu" ]; then exec "$HOME/bin/lab-menu"; fi
+    exec goblin room read 10 ;;
+  room)
+    case "${a[1]:-read}" in
+      read|wait) exec goblin room "${a[1]:-read}" "${a[2]:-}" ;;
+      post) exec goblin room post "${SSH_ORIGINAL_COMMAND#room post }" ;;
+    esac ;;
+  vault)
+    case "${a[1]:-status}" in
+      status|unlock|lock|approvals) exec goblin vault "${a[1]:-status}" ;;
+    esac ;;
+esac
+echo "this phone key allows: menu | room read [N] | room post TEXT | room wait [S] | vault status|unlock|lock|approvals"
+exit 2

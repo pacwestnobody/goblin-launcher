@@ -1,0 +1,11 @@
+# Shelf facts: short statements about your setup, each with a probe. Only facts whose probe passes
+# right now reach the model. Copy to ~/.config/goblin/shelf.yaml. Probes use the `reads` in librarian.yaml.
+- id: gateway
+  fact: "The gateway is 192.168.1.1 and answers on HTTPS."
+  probe: {read: https_page, args: ["192.168.1.1"], match: {regex: "(?i)<html"}}
+- id: photos-host
+  fact: "The photo server runs in CT 105 on the Proxmox host."
+  probe: {read: pct_status, args: ["105"], match: {regex: "status: running"}}
+- id: local-ollama
+  fact: "Ollama is running on 127.0.0.1:11434."
+  probe: {read: ollama_tags, args: ["11434"], match: {regex: "models"}}

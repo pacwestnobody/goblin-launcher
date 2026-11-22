@@ -1,0 +1,60 @@
+#!/bin/bash
+# Root, on this machine. USB disk inventory for goblin-vault (it reads usb-drives.json).
+# Only USB-transport disks. Mounted disks and never-wipe serials are listed but not eligible.
+set -euo pipefail
+OUT="${GOBLIN_USB_INV:-/var/lib/goblin-usb/usb-drives.json}"
+DENY="${GOBLIN_USB_DENY:-/etc/goblin/usb-never-wipe}"
+export OUT DENY
+python3 - <<'PY'
+import json, os, socket, subprocess, time
+from pathlib import Path
+out = Path(os.environ["OUT"])
+deny = set()
+try:
+    deny = {l.split("#")[0].strip() for l in Path(os.environ["DENY"]).read_text().splitlines()} - {""}
+except OSError:
+    pass
+tree = json.loads(subprocess.check_output(["lsblk", "-J", "-b", "-o",
+    "NAME,PATH,SIZE,TYPE,RM,MODEL,SERIAL,LABEL,UUID,MOUNTPOINT,TRAN,HOTPLUG,VENDOR,FSTYPE"], text=True))
+def kids(d):
+    out = []
+    for c in d.get("children") or []:
+        out.append(c); out.extend(kids(c))
+    return out
+drives = []
+for d in tree.get("blockdevices") or []:
+    if d.get("type") != "disk" or (d.get("tran") or "").lower() != "usb":
+        continue
+    path = d.get("path") or f"/dev/{d.get('name')}"
+    size = int(d.get("size") or 0)
+    parts = [{"path": c.get("path"), "name": c.get("name"), "size_bytes": int(c.get("size") or 0),
+              "fstype": c.get("fstype"), "label": c.get("label"), "uuid": c.get("uuid"),
+              "mountpoint": c.get("mountpoint")} for c in kids(d)]
+    mps = ([d["mountpoint"]] if d.get("mountpoint") else []) + [p["mountpoint"] for p in parts if p["mountpoint"]]
+    f, human = float(size), "?"
+    for u in ["B", "KiB", "MiB", "GiB", "TiB"]:
+        if f < 1024 or u == "TiB":
+            human = f"{int(f)} {u}" if u == "B" else f"{f:.1f} {u}"; break
+        f /= 1024
+    model = (d.get("model") or "").strip() or None
+    serial = (d.get("serial") or "").strip() or None
+    warning = None
+    if serial and serial in deny:
+        warning = "on the never-wipe list (/etc/goblin/usb-never-wipe)"
+    elif mps:
+        warning = "mounted: unmount it first"
+    bits = [path, human] + ([model] if model else []) + ([f"S/N {serial}"] if serial else []) + ["usb"]
+    drives.append({"path": path, "name": d.get("name"), "size_bytes": size, "size_human": human,
+                   "model": model, "serial": serial, "vendor": (d.get("vendor") or "").strip() or None,
+                   "tran": "usb", "removable": bool(d.get("rm")), "hotplug": bool(d.get("hotplug")),
+                   "partitions": parts, "mountpoints": mps, "is_system_disk": False,
+                   "eligible_for_wipe": warning is None, "warning": warning,
+                   "display_id": " · ".join(bits), "confirm_phrase": f"WIPE {path}",
+                   "source": "host-" + socket.gethostname()})
+tmp = out.with_suffix(".tmp")
+tmp.write_text(json.dumps({"updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                           "host": socket.gethostname(), "drives": drives}, indent=2) + "\n")
+os.chmod(tmp, 0o640)
+tmp.replace(out)
+PY
+chgrp goblin-vault "$OUT" 2>/dev/null || true

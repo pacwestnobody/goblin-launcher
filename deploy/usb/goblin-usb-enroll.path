@@ -1,0 +1,9 @@
+[Unit]
+Description=Goblin Launcher: watch for USB key enroll jobs from goblin-vault
+
+[Path]
+PathExists=/var/lib/goblin-usb/jobs/request.json
+Unit=goblin-usb-enroll.service
+
+[Install]
+WantedBy=multi-user.target

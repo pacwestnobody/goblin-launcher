@@ -1,0 +1,67 @@
+# Path Librarian settings. Copy to ~/.config/goblin/librarian.yaml.
+# No keys here: `goblin librarian add-model` writes keys to ~/.config/goblin/secrets.yaml (mode 600).
+
+mode: shadow          # shadow -> store -> live. Don't skip stages.
+holdout_rate: 0.3     # in live mode, this share of jobs runs with the librarian off (for measuring)
+max_steps: 40
+
+# ---- models for the librarian's own jobs (the Ledger tab) -------------------------------
+# `provider` is a provider name from config.yaml, or a full endpoint (openai / anthropic + base_url).
+models:
+  local:  {provider: local, model: "qwen3:8b", max_tokens: 4096, temperature: 0.2}
+  # cloud: {provider: openai, base_url: "https://api.openai.com/v1", model: gpt-4o-mini, key_ref: cloud}
+roles:
+  talker: local       # does the job
+  writer: local       # proposes route cards from traces (the checker is code either way)
+
+# ---- where things run --------------------------------------------------------------------
+targets:
+  local: {type: local, about: "This computer. Shell runs here."}
+  # sandbox:                   # a throwaway container with no route to anything you care about
+  #   type: pct
+  #   host: 192.168.1.10       # Proxmox host
+  #   user: root
+  #   ctid: 200
+  #   identity: ~/.config/goblin/ssh/id_ed25519
+  # lab-probe: {type: vault, vault_target: proxmox-ssh, no_prompt: true}   # background reads via goblin-vault
+
+builtin_tools: {enabled: true, target: local, confirm: true, timeout: 120}
+deny_paths: [~/.ssh, ~/.config/goblin/ssh, ~/.config/goblin/secrets.yaml, ~/.config/goblin/vault-token]
+command_tools: {}
+mcp_servers: {}
+
+# ---- allowlisted reads: the talker's look-only tools AND the only probe vocabulary ----------
+reads:
+  ip_addr:       {description: "IPv4 addresses on one NIC", cmd: ["ip", "-4", "-o", "addr", "show", "dev", "{0}"], target: local}
+  dns_query:     {description: "Ask one DNS server for a name", cmd: ["dig", "+short", "@{0}", "{1}"], target: local}
+  https_page:    {description: "Fetch an HTTPS page (self-signed ok)", cmd: ["curl", "-skL", "--max-time", "5", "https://{0}/"], target: local, timeout: 10}
+  ping_once:     {description: "One ping", cmd: ["ping", "-c", "1", "-W", "2", "{0}"], target: local, trivial: true}
+  systemctl_status: {description: "Status of a systemd unit", cmd: ["systemctl", "status", "--no-pager", "{0}"], target: job}
+  journal_tail:  {description: "Last 50 journal lines for a unit", cmd: ["journalctl", "-u", "{0}", "-n", "50", "--no-pager"], target: job}
+  py_import:     {description: "Try importing a Python module", cmd: ["python3", "-c", "import importlib,sys; importlib.import_module(sys.argv[1]); print('OK')", "{0}"], target: job, exit_meaningful: true}
+  ollama_tags:   {description: "Models on a local Ollama port", cmd: ["curl", "-s", "--max-time", "3", "http://127.0.0.1:{0}/api/tags"], target: local, arg_pattern: "^1143[0-9]$"}
+  pct_status:    {description: "Status of a Proxmox container", cmd: ["pct", "status", "{0}"], target: local}
+  file_exists:   {description: "Does a path exist", cmd: ["test", "-e", "{0}"], target: job, trivial: true}
+
+# ---- job kinds: a fixed list; part of a card's key -------------------------------------------
+job_kinds:
+  python_dep_fix: {tool_family: python, stable: true}
+  service_start_fix: {tool_family: systemd, stable: true}
+  network_diag: {tool_family: network, stable: true}
+  live_status: {tool_family: shell, stable: false}    # never writes cards
+
+store: {path: store.db, cap_bytes: 2000000, superseded_delay_s: 3600, couldnt_run_limit: 3}
+consult: {wide_tree_median: 6, min_history: 3, mid_walk_step: 5}
+write: {min_steps: 6, max_field_chars: 400, max_route_steps: 12}
+shelf: shelf.yaml
+trace_dir: traces
+
+# ---- knowledge: your notes, searched every turn (build with `goblin librarian index`) ------------
+knowledge:
+  db: ~/.local/share/goblin/knowledge.sqlite
+  embed_url: http://127.0.0.1:11434/api/embed
+  model: nomic-embed-text
+  top: 4
+  synonyms: {}        # e.g. {nas: [mynas01, storage]}: your own names for things
+context:
+  budget: {total: 7000, shelf: 1800, knowledge: 4200, card: 1200}   # characters per turn, ~4 per token

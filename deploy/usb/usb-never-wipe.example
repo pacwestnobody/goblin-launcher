@@ -1,0 +1,3 @@
+# /etc/goblin/usb-never-wipe: one USB serial per line. The enroll helper refuses these disks
+# (installers, backup sticks, anything you never want reformatted). Find a serial with:
+#   lsblk -o PATH,TRAN,MODEL,SERIAL

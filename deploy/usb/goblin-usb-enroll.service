@@ -1,0 +1,7 @@
+[Unit]
+Description=Goblin Launcher: enroll a USB security key (wipe/format/write)
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /usr/local/sbin/goblin-usb-enroll

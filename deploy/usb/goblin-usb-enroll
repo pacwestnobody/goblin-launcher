@@ -1,0 +1,102 @@
+#!/bin/bash
+# Root, on this machine. Processes one USB key enroll job from goblin-vault:
+#   /var/lib/goblin-usb/jobs/request.json  (writable only by root + goblin-vault)
+# Refuses unless: USB transport, in the inventory, not mounted, not on the never-wipe list,
+# and confirm_wipe == "WIPE <disk>". Then wipe -> msdos -> FAT32 "GRIPHOOK" -> GRIPHOOK/ layout.
+# The vault worker only gets here after the owner's PIN (every vault change needs it).
+set -euo pipefail
+JOB="${GOBLIN_USB_JOBS:-/var/lib/goblin-usb/jobs}"
+REQ="$JOB/request.json"; RESP="$JOB/response.json"
+INV="${GOBLIN_USB_INV:-/var/lib/goblin-usb/usb-drives.json}"; DENY="${GOBLIN_USB_DENY:-/etc/goblin/usb-never-wipe}"
+[[ -f "$REQ" ]] || exit 0
+GOBLIN_USB_INV="$INV" GOBLIN_USB_DENY="$DENY" /bin/bash "${GOBLIN_USB_SCAN:-/usr/local/sbin/goblin-usb-scan}"   # fresh inventory before deciding
+export REQ RESP INV DENY
+python3 - <<'PY'
+import json, os, subprocess, tempfile, time
+from pathlib import Path
+req_p, resp_p, inv_p = Path(os.environ["REQ"]), Path(os.environ["RESP"]), Path(os.environ["INV"])
+
+def respond(obj):
+    tmp = resp_p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(obj) + "\n")
+    try:   # root in production; tolerated only so the refusal paths can be tested unprivileged
+        os.chown(tmp, 0, __import__("grp").getgrnam("goblin-vault").gr_gid)
+    except (PermissionError, KeyError):
+        pass
+    os.chmod(tmp, 0o640)
+    tmp.replace(resp_p)
+    try:
+        req_p.unlink()
+    except OSError:
+        pass
+
+def fail(msg):
+    respond({"ok": False, "error": msg})
+    raise SystemExit(1)
+
+try:
+    req = json.loads(req_p.read_text())
+except Exception as e:
+    fail(f"bad request: {e}")
+disk = str(req.get("disk_path") or "")
+if not disk.startswith("/dev/sd") or "/" in disk[5:]:
+    fail("invalid disk_path (USB disks appear as /dev/sdX)")
+if str(req.get("confirm_wipe") or "") != f"WIPE {disk}":
+    fail(f"confirm mismatch; need WIPE {disk}")
+try:
+    inv = {d["path"]: d for d in json.loads(inv_p.read_text()).get("drives") or []}
+except Exception as e:
+    fail(f"no inventory: {e}")
+d = inv.get(disk)
+if d is None:
+    fail(f"{disk} is not a USB disk in the inventory")
+if not d.get("eligible_for_wipe"):
+    fail(f"{disk} refused: {d.get('warning')}")
+# independent re-check right before wiping
+info = json.loads(subprocess.check_output(["lsblk", "-J", "-o", "PATH,TRAN,SERIAL,MOUNTPOINT", disk], text=True))
+top = (info.get("blockdevices") or [{}])[0]
+if (top.get("tran") or "").lower() != "usb":
+    fail(f"{disk} is not USB")
+def mounted(n):
+    return bool(n.get("mountpoint")) or any(mounted(c) for c in n.get("children") or [])
+if mounted(top):
+    fail(f"{disk} is mounted: unmount it first")
+
+def run(cmd):
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    if p.returncode != 0:
+        fail(f"{' '.join(cmd)}: {(p.stderr or p.stdout)[:400]}")
+
+run(["wipefs", "-a", disk])
+run(["parted", "-s", disk, "mklabel", "msdos"])
+run(["parted", "-s", disk, "mkpart", "primary", "fat32", "1MiB", "100%"])
+subprocess.run(["partprobe", disk], capture_output=True); time.sleep(1.0)
+part = disk + "1"
+if not Path(part).exists():
+    fail(f"partition {part} missing after parted")
+run(["mkfs.vfat", "-F", "32", "-n", "GRIPHOOK", part])
+mp = Path(tempfile.mkdtemp(prefix="goblin-usb-"))
+try:
+    run(["mount", "-o", "umask=077", part, str(mp)])
+    root = mp / "GRIPHOOK"; root.mkdir(exist_ok=True)
+    (root / "device.json").write_text(json.dumps({
+        "device_id": req["device_id"], "label": req.get("label") or req["device_id"],
+        "install_id": req["install_id"], "algorithm": "Ed25519", "protocol": "griphook-v1",
+        "backend": "usb"}, indent=2) + "\n")
+    (root / "device.pub").write_text(str(req["public_pem"]))
+    (root / "device_private.pem").write_bytes(str(req["private_pem"]).encode())
+    (root / "README.txt").write_text("Goblin Launcher security key. Do not copy or share "
+                                     f"device_private.pem.\ndevice_id={req['device_id']}\n")
+    subprocess.run(["sync"], check=False)
+finally:
+    subprocess.run(["umount", str(mp)], capture_output=True)
+    try:
+        mp.rmdir()
+    except OSError:
+        pass
+subprocess.run(["/bin/bash", "/usr/local/sbin/goblin-usb-scan"], capture_output=True)
+respond({"ok": True, "disk_path": disk, "partition_path": part, "volume_label": "GRIPHOOK",
+         "display_id": d.get("display_id"), "serial": d.get("serial"), "model": d.get("model"),
+         "size_human": d.get("size_human"), "device_id": req["device_id"], "source": "host-enroll"})
+print("enroll ok", disk)
+PY

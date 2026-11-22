@@ -1,0 +1,8 @@
+{
+  "id": "goblin",
+  "name": "Goblin Launcher",
+  "description": "Adds verified lab facts and knowledge-library notes to each turn, traces tool calls, and offers lab_run",
+  "contracts": { "tools": ["lab_run"] },
+  "activation": { "onStartup": true },
+  "configSchema": { "type": "object", "additionalProperties": false }
+}
