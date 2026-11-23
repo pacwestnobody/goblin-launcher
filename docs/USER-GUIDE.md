@@ -366,7 +366,17 @@ Relevant notes are added to an agent's turn automatically; agents can also ask (
 `librarian_context`). Add your own names for things in `knowledge.synonyms`.
 
 **Route cards**: after a hard job, a writer model turns the tool trace into a small card (the route
-that worked, the tempting dead end, probes); a code checker accepts or rejects it. On a repeat job the
+that worked, the tempting dead end, probes); a code checker accepts or rejects it.
+
+Cards come from two kinds of job. **Ledger jobs** record their kind, dead end and finish as they run.
+**Terminal sessions** (Grok Build, Claude Code, any agent wired through the hooks or MCP) are read when
+they end: if a shell command matching one of your allowlisted `reads` failed, was run again after an
+attempt and still failed, and later passed, the session becomes a card candidate with the matching job
+kind (`systemctl` status → `service_start_fix`, `py_import`/`pip_show` → `python_dep_fix`,
+`ollama_tags` → `ollama_fix`, ping/dns/http reads → `network_diag`). Anything less is left alone.
+Candidates wait under **Ledger → Route cards** until you press **Write them now**, which loads the writer
+model (on a local GPU, after unloading anything else); they are written straight away only if the writer
+model is already loaded. `goblin librarian report` shows how many are waiting. On a repeat job the
 card is offered only if its probe says it applies. Stages (`goblin librarian mode`):
 `shadow` (count only) → `store` (write cards) → `live` (inject, with a holdout share). Watch
 `goblin librarian report` before moving on. Jobs run from the Ledger tab or `goblin librarian run`.

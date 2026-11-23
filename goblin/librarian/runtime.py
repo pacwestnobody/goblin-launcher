@@ -11,7 +11,9 @@ import secrets
 import threading
 import time
 
-from . import checker, shelf as shelf_mod
+import os
+
+from . import checker, interpret as interpret_mod, shelf as shelf_mod
 from . import context as context_mod
 from .store import Store
 from .trace import Trace
@@ -44,6 +46,9 @@ class Session:
 class Librarian:
     def __init__(self, cfg, shelf_interval: int = 300):
         self.cfg = cfg
+        self._pending_lock = threading.Lock()
+        self._writing = threading.Lock()
+        self.last_write = None
         self.shelf_interval = shelf_interval
         self._local = threading.local()
         self._shelf = {"checked": None, "passing": [], "rows": []}
@@ -154,11 +159,88 @@ class Librarian:
                                  "context_chars": s.context_chars, "ended": time.time()})
             if calls:
                 s.trace.save()
+        auto = None
+        if calls and not s.trace.meta.get("kind"):
+            # a terminal session: read its trace for a kind, a dead end and a verified finish (plain code)
+            try:
+                auto = interpret_mod.interpret(s.trace.records, self.cfg)
+            except Exception as e:  # noqa: BLE001 - never lose the trace over this
+                print(f"[librarian] interpreting {s.job_id} failed: {e}", flush=True)
+            if auto:
+                with s.lock:
+                    s.trace.records = auto["records"]
+                    s.trace.meta.update({"kind": auto["kind"], "key": auto["key"], "artifact": auto["artifact"],
+                                         "tool_family": auto["family"], "auto_kind": auto["reason"]})
+                    s.trace.save()
         if calls:
-            self.store.log_job(job_id=s.job_id, kind=s.trace.meta.get("kind"), key=None, mode=self.cfg["mode"],
-                               holdout=0, injected_card=None, tokens_in=0, tokens_out=0, steps=len(calls),
-                               status=status, verify_ok=None)
-        return {"ok": True, "job_id": s.job_id, "steps": len(calls), "saved": bool(calls)}
+            self.store.log_job(job_id=s.job_id, kind=s.trace.meta.get("kind"), key=s.trace.meta.get("key"),
+                               mode=self.cfg["mode"], holdout=0, injected_card=None, tokens_in=0, tokens_out=0,
+                               steps=len(calls), status=status, verify_ok=None)
+        if auto and self.cfg["mode"] in ("store", "live"):
+            self._pending_add(str(s.trace.path), auto)
+            if self.writer_loaded():
+                threading.Thread(target=self.write_pending, daemon=True).start()
+        return {"ok": True, "job_id": s.job_id, "steps": len(calls), "saved": bool(calls), "kind": (auto or {}).get("kind")}
+
+    # ---- card candidates from terminal sessions --------------------------------------------
+    # The writer is a model; on the GPU it is only loaded when the owner asks (the Ledger's button) or when
+    # it already happens to be loaded. Until then candidates wait here.
+    def _pending_path(self) -> str:
+        return os.path.join(os.path.dirname(self.cfg.path(self.cfg["store"]["path"])), "pending-cards.json")
+
+    def pending(self) -> list[dict]:
+        try:
+            with open(self._pending_path()) as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return []
+
+    def _pending_save(self, items: list[dict]) -> None:
+        tmp = self._pending_path() + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(items, f)
+        os.replace(tmp, self._pending_path())
+
+    def _pending_add(self, path: str, auto: dict) -> None:
+        with self._pending_lock:
+            items = [x for x in self.pending() if x["trace"] != path]
+            items.append({"trace": path, "kind": auto["kind"], "key": auto["key"], "reason": auto["reason"], "queued": time.time()})
+            self._pending_save(items)
+
+    def writer_loaded(self) -> bool:
+        """Is the writer model already loaded on the GPU (so writing loads nothing new)?"""
+        try:
+            name, mcfg = self.cfg.role_model("writer")
+            goblin = getattr(self.cfg, "goblin", None)
+            if not goblin or mcfg.get("provider") != (goblin.get("gpu") or {}).get("provider"):
+                return False                          # not a GPU model: the button decides
+            from .. import gpu
+            p = gpu.provider(goblin)
+            want = mcfg["model"].split(":")[0]
+            return any(n.split(":")[0] == want for n in p.loaded())
+        except Exception:  # noqa: BLE001
+            return False
+
+    def write_pending(self) -> list[dict]:
+        """Write every queued candidate (one at a time). Returns each outcome."""
+        from . import writer, providers
+        if not self._writing.acquire(blocking=False):
+            return []
+        out = []
+        try:
+            for item in list(self.pending()):
+                try:
+                    t = Trace.load(item["trace"])
+                    res = writer.write_job(t, self.cfg, self.store)
+                except (OSError, providers.ProviderError, KeyError, ValueError) as e:
+                    res = {"outcome": "writer_error", "reason": str(e)}
+                out.append({**item, **res})
+                with self._pending_lock:
+                    self._pending_save([x for x in self.pending() if x["trace"] != item["trace"]])
+            self.last_write = {"at": time.time(), "results": out}
+            return out
+        finally:
+            self._writing.release()
 
     def _reap(self) -> None:
         cutoff = time.time() - SESSION_IDLE_S

@@ -175,6 +175,17 @@ def report(cfg):
     db = st.db
     print(f"mode: {cfg['mode']}   store: {st.readable_bytes()}B / {cfg['store']['cap_bytes']}B  "
           f"cards: {len(st.all_readable())}")
+    import json as _json
+    import os as _os
+    pend_path = _os.path.join(_os.path.dirname(cfg.path(cfg["store"]["path"])), "pending-cards.json")
+    try:
+        with open(pend_path) as f:
+            pend = _json.load(f)
+    except (OSError, ValueError):
+        pend = []
+    if pend:
+        print(f"terminal sessions waiting for the writer: {len(pend)}  ("
+              + ", ".join(sorted({p['kind'] for p in pend})) + ")  · Ledger → Route cards → Write them now")
     print("\nby kind (holdout vs card injected vs other):")
     for kind, in db.execute("SELECT DISTINCT kind FROM jobs"):
         for label, where in (("holdout", "holdout=1"), ("injected", "holdout=0 AND injected_card IS NOT NULL"),

@@ -124,7 +124,27 @@
   });
   $("#jstop").addEventListener("click", () => current && api(`/api/ledger/jobs/${current.id}/stop`, {}).catch(e => toast(e.message)));
 
+  // terminal sessions the librarian read as a fixable job, waiting for the writer model
+  async function loadPending() {
+    let p; try { p = await api("/api/ledger/pending"); } catch (e) { $("#pendingbox").innerHTML = ""; return; }
+    const n = p.pending.length;
+    const last = p.last ? `<div class="note">Last writing: ${p.last.results.map(r => `${esc(r.kind)} → ${esc(r.outcome)}${r.reason ? " (" + esc(r.reason) + ")" : ""}`).join("; ") || "nothing"}</div>` : "";
+    if (!n && !p.writing) { $("#pendingbox").innerHTML = last; return; }
+    $("#pendingbox").innerHTML = `<div class="cardbox pending">
+      <b>${p.writing ? "Writing cards…" : `${n} terminal session${n === 1 ? "" : "s"} ready to become ${n === 1 ? "a card" : "cards"}`}</b>
+      <ul>${p.pending.map(x => `<li>${esc(x.kind)} · <span class="note">${esc(x.reason)}</span></li>`).join("")}</ul>
+      ${p.writing ? "" : `<button type="button" id="pwrite">Write ${n === 1 ? "it" : "them"} now</button>
+      <span class="note">${p.writer_loaded ? "The writer model is already loaded." : "This loads the writer model on the GPU (anything else there is unloaded first)."}</span>`}
+      ${last}</div>`;
+    $("#pwrite")?.addEventListener("click", async () => {
+      try { await api("/api/ledger/pending/write", {}); } catch (e) { toast(e.message); }
+      const poll = setInterval(async () => { await loadPending(); const q = await api("/api/ledger/pending"); if (!q.writing) { clearInterval(poll); loadCards(); loadStatus(); } }, 3000);
+      loadPending();
+    });
+  }
+
   async function loadCards() {
+    loadPending();
     let cards; try { cards = await api("/api/ledger/cards"); } catch (e) { $("#cardlist").innerHTML = `<div class="note">${esc(e.message)}</div>`; return; }
     $("#cardlist").innerHTML = cards.map(c => `<div class="cardbox"><b>#${esc(c.id)}</b> <span class="note">${esc(c.card.type || "card")} · ${esc(c.hits)} hits · ${esc(c.bytes)} B</span>
       <div class="key">${esc(c.key)}</div><ol>${(c.card.route || []).map(s => `<li>${esc(s)}</li>`).join("")}</ol>

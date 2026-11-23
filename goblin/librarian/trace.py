@@ -70,8 +70,10 @@ class Trace:
         return None
 
     def save(self):
+        # the job's kind is kept as job_kind on the meta line: "kind" marks what the line is
+        meta = {k: v for k, v in self.meta.items() if k != "kind"}
         with open(self.path, "w") as f:
-            f.write(json.dumps({"kind": "meta", **self.meta}) + "\n")
+            f.write(json.dumps({**meta, "job_kind": self.meta.get("kind"), "kind": "meta"}) + "\n")
             for r in self.records:
                 f.write(json.dumps(r) + "\n")
 
@@ -79,8 +81,17 @@ class Trace:
     def load(cls, path):
         with open(path) as f:
             lines = [json.loads(ln) for ln in f if ln.strip()]
-        meta = lines[0] if lines and lines[0]["kind"] == "meta" else {}
+        first = lines[0] if lines else {}
+        records = ("call", "fork", "finish", "rerun")
+        # older files wrote the job kind over the "meta" marker; a first line with a job id that isn't a
+        # record is the meta line either way
+        is_meta = first.get("kind") == "meta" or (first.get("kind") not in records and "job_id" in first)
+        meta = dict(first) if is_meta else {}
         t = cls(path, meta.get("job_id", ""))
-        t.meta = {k: v for k, v in meta.items() if k != "kind"}
-        t.records = [r for r in lines if r["kind"] != "meta"]
+        if "job_kind" in meta:
+            meta["kind"] = meta.pop("job_kind")
+        elif meta.get("kind") == "meta":
+            meta.pop("kind")
+        t.meta = meta
+        t.records = lines[1:] if is_meta else lines
         return t

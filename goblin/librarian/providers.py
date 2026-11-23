@@ -39,14 +39,23 @@ def _to_shared(system: str, messages: list[dict]) -> list[dict]:
 
 
 class Shared:
-    def __init__(self, provider, mcfg: dict):
-        self.p, self.mcfg = provider, mcfg
+    def __init__(self, provider, mcfg: dict, gpu_cfg=None):
+        # gpu_cfg: Goblin's config when this model runs on the GPU Ollama, so each call takes the GPU's turn
+        # and clears any other model off it first (one local model at a time, as everywhere else)
+        self.p, self.mcfg, self.gpu_cfg = provider, mcfg, gpu_cfg
 
     def chat(self, system, messages, tools):
         specs = [{"type": "function", "function": {"name": t["name"], "description": t["description"],
                                                    "parameters": t["schema"]}} for t in tools or []]
-        r = self.p.chat(self.mcfg["model"], _to_shared(system, messages), specs or None,
-                        int(self.mcfg.get("max_tokens", 4096)), float(self.mcfg.get("temperature", 0.2)))
+        args = (self.mcfg["model"], _to_shared(system, messages), specs or None,
+                int(self.mcfg.get("max_tokens", 4096)), float(self.mcfg.get("temperature", 0.2)))
+        if self.gpu_cfg is not None:
+            from .. import gpu
+            with gpu.turn_lock:
+                gpu.make_exclusive(self.gpu_cfg, self.mcfg["model"])
+                r = self.p.chat(*args)
+        else:
+            r = self.p.chat(*args)
         return ChatResult(r.content, [{"id": c["id"] or uuid.uuid4().hex[:12], "name": c["name"],
                                        "args": c.get("arguments") or {}} for c in r.tool_calls])
 
@@ -79,7 +88,8 @@ def make(cfg, model_name):
         return MockProvider(mcfg)
     shared = (cfg.goblin.get("providers") or {}) if getattr(cfg, "goblin", None) else {}
     if kind in shared:
-        return Shared(make_shared(kind, shared[kind]), mcfg)
+        on_gpu = kind == ((cfg.goblin.get("gpu") or {}).get("provider") if getattr(cfg, "goblin", None) else None)
+        return Shared(make_shared(kind, shared[kind]), mcfg, cfg.goblin if on_gpu else None)
     if kind in ("openai", "anthropic", "ollama"):     # a full endpoint in the model entry itself
         pcfg = {"type": kind, "base_url": mcfg.get("base_url")}
         p = make_shared(model_name, pcfg)

@@ -95,6 +95,8 @@ class Api:
             ("POST", "/api/ledger/jobs/{id}/confirm", lambda q, b, id: {"ok": self.jobs.answer(id, b.get("ok"))}),
             ("POST", "/api/ledger/jobs/{id}/stop", lambda q, b, id: {"ok": self.jobs.stop(id)}),
             ("POST", "/api/ledger/sandbox/{action}", lambda q, b, action: self.sandbox(action)),
+            ("GET", "/api/ledger/pending", lambda q, b: self.pending()),
+            ("POST", "/api/ledger/pending/write", lambda q, b: self.write_pending()),
         ]
 
     # ---- helpers ------------------------------------------------------------------
@@ -162,6 +164,22 @@ class Api:
         from ..librarian.store import Store
         cfg = self.s.librarian_cfg()
         return cfg, Store(cfg.path(cfg["store"]["path"]))
+
+    def pending(self):
+        lib = self.s.librarian
+        return {"pending": lib.pending(), "writing": lib._writing.locked(), "last": lib.last_write,
+                "writer_loaded": lib.writer_loaded(), "mode": lib.cfg["mode"]}
+
+    def write_pending(self):
+        """The owner's say-so to load the writer model and write every queued card."""
+        import threading
+        lib = self.s.librarian
+        if lib._writing.locked():
+            return {"started": False, "reason": "already writing"}
+        if not lib.pending():
+            return {"started": False, "reason": "nothing queued"}
+        threading.Thread(target=lib.write_pending, daemon=True).start()
+        return {"started": True}
 
     def ledger_status(self):
         cfg, st = self._store()
